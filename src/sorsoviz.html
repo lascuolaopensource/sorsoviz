@@ -71,7 +71,7 @@
      .record {
         stroke: #bae0d6;
         _fill: #bae0d6;
-        opacity: .6;
+        opacity: .8;
      }
 
      .year {
@@ -88,7 +88,7 @@
 </head>
 <body>
     <svg width=960 height=500></svg>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.6/d3.js"></script>
+    <script src="https://d3js.org/d3.v4.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3-legend/1.3.0/d3-legend.min.js"></script>
     <script src="https://d3js.org/d3-color.v1.min.js"></script>
     <script src="https://d3js.org/d3-interpolate.v1.min.js"></script>
@@ -96,8 +96,12 @@
 
     <script>
     var json_data = []
+    var random_temp = [-3, -2, -1, 0, 1, 2, 3, 4 ]
+    var old_temp = 0
     for (var i=0; i<365; i++) {
-        json_data.push({index: i, val: Math.floor(Math.random() * 100), temp: Math.floor(Math.random() * 100 - 50) })
+        new_temp = (old_temp + random_temp[Math.floor(Math.random()*random_temp.length)]) % 42
+        json_data.push({index: i, val: Math.floor(Math.random() * 100), temp: new_temp })
+        old_temp = new_temp
     }
 
 
@@ -112,17 +116,17 @@
     origin = svg.append('g')
         .attr('transform', 'translate(' + width*3/5 + ',' + height/2 + ')'),
 
-    rScale = d3.scale.linear()
+    rScale = d3.scaleLinear()
         .domain([0, 110])
         .range([centered_img_radius, height/2 - margin]),
 
-    temp_scale = d3.scale.linear()
+    temp_scale = d3.scaleLinear()
         .domain([70, -50])
 
     yScale = function(day, temp) { return -Math.cos(angleScale(day)*Math.PI/180)*rScale(parseInt(temp))},
     xScale = function(day, temp) { return Math.sin(angleScale(day)*Math.PI/180)*rScale(parseInt(temp))},
 
-    angleScale = d3.scale.linear()
+    angleScale = d3.scaleLinear()
         .range([0, 360]);
 
     d3.json('http://192.168.1.2:3003/openersource', function(err, _json_data){
@@ -220,7 +224,7 @@
             .text('Il numero di Peroni stappate presso SOS')
 
         //create legend
-        var legendScale = d3.scale.ordinal()
+        var legendScale = d3.scaleOrdinal()
             .domain(['Record', 'Average', 'This Year - within avg', 'This Year - beyond avg', ])
             .range(['record', 'avg', 'beyond', 'year'])
 
