@@ -88,11 +88,12 @@
 </head>
 <body>
     <svg width=960 height=500></svg>
-    <script src="https://d3js.org/d3.v4.min.js"></script>
+    <script src="https://d3js.org/d3.v3.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3-legend/1.3.0/d3-legend.min.js"></script>
     <script src="https://d3js.org/d3-color.v1.min.js"></script>
     <script src="https://d3js.org/d3-interpolate.v1.min.js"></script>
     <script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
+    <script src="d3.svg.circularbrush.js"></script>
 
     <script>
     var json_data = []
@@ -104,8 +105,6 @@
         old_temp = new_temp
     }
 
-
-
     var width = 960,
     margin = 20,
     height = 500,
@@ -116,21 +115,22 @@
     origin = svg.append('g')
         .attr('transform', 'translate(' + width*3/5 + ',' + height/2 + ')'),
 
-    rScale = d3.scaleLinear()
+    rScale = d3.scale.linear()
         .domain([0, 110])
         .range([centered_img_radius, height/2 - margin]),
 
-    temp_scale = d3.scaleLinear()
+    temp_scale = d3.scale.linear()
         .domain([70, -50])
 
     yScale = function(day, temp) { return -Math.cos(angleScale(day)*Math.PI/180)*rScale(parseInt(temp))},
     xScale = function(day, temp) { return Math.sin(angleScale(day)*Math.PI/180)*rScale(parseInt(temp))},
 
-    angleScale = d3.scaleLinear()
+    angleScale = d3.scale.linear()
         .range([0, 360]);
+    var rawData = {}
 
     d3.json('http://192.168.1.2:3003/openersource', function(err, _json_data){
-
+        rawData = json_data;
         var max_val = d3.max(json_data, d => parseInt(d.val));
         rScale.domain([0, max_val])
 
@@ -224,7 +224,7 @@
             .text('Il numero di Peroni stappate presso SOS')
 
         //create legend
-        var legendScale = d3.scaleOrdinal()
+        var legendScale = d3.scale.ordinal()
             .domain(['Record', 'Average', 'This Year - within avg', 'This Year - beyond avg', ])
             .range(['record', 'avg', 'beyond', 'year'])
 
@@ -239,9 +239,242 @@
             .call(legend);
 
         */
+        d3.json("cloud_rain_freeze.json", loadBars);
     });
 
+    function loadBars(data) {
+      var freezeBars = [];
+      var rainBars = [];
+      var cloudBars = [];
+      var freeze = {};
+      var cloud = {start: data[0].date, category: data[0].cloud};
+      var rain = {};
 
+      data.forEach(function (d, i) {
+        if (d.cloud !== cloud.category) {
+          cloud.end = d.date;
+          cloudBars.push(cloud);
+          cloud = {start: d.date, category: d.cloud};
+        }
+
+        if (freeze.start && !d.freeze) {
+          freeze.end = d.date;
+          freezeBars.push(freeze);
+          freeze = {};
+        }
+        else if (d.freeze && !freeze.start) {
+          freeze.start = d.date;
+        }
+        if (rain.start && !d.rain) {
+          rain.end = d.date;
+          rainBars.push(rain);
+          rain = {};
+        }
+        else if (d.rain && !rain.start) {
+          rain.start = d.date;
+        }
+
+      });
+
+      drawBars(rainBars, "rain", 205);
+      drawBars(freezeBars, "freeze", 200);
+      drawBars(cloudBars, "freeze", 210);
+    }
+
+    function loadBars(data) {
+      freezeBars = [];
+      rainBars = [];
+      cloudBars = [];
+      var freeze = {};
+      var cloud = {start: data[0].date, category: data[0].cloud};
+      var rain = {};
+      var dateScale = d3.time.scale().domain([new Date("01/01/2015"), new Date("12/31/2015")]).range([1,366]);
+
+      data.forEach(function (d, i) {
+
+        if (d.cloud !== cloud.category) {
+          cloud.end = d.date;
+          cloud.endInt = dateScale(new Date(d.date));
+          cloudBars.push(cloud);
+          cloud = {start: d.date, startInt: dateScale(new Date(d.date)), category: d.cloud};
+        }
+
+        if (freeze.start && !d.freeze) {
+          freeze.end = d.date;
+          freeze.endInt = dateScale(new Date(d.date));
+          freezeBars.push(freeze);
+          freeze = {};
+        }
+        else if (d.freeze && !freeze.start) {
+          freeze.start = d.date;
+          freeze.startInt = dateScale(new Date(d.date));
+        }
+        if (rain.start && !d.rain) {
+          rain.end = d.date;
+          rain.endInt = dateScale(new Date(d.date));
+          rainBars.push(rain);
+          rain = {};
+        }
+        else if (d.rain && !rain.start) {
+          rain.start = d.date;
+          rain.startInt = dateScale(new Date(d.date));
+        }
+
+      });
+
+      drawBars(rainBars, "rain", 205);
+      drawBars(freezeBars, "freeze", 200);
+      drawBars(cloudBars, "cloud", 210);
+
+      drawBrush();
+    }
+
+    function drawBrush() {
+        brush = d3.svg.circularbrush()
+          .range([1,366])
+          .innerRadius(10)
+          .outerRadius(218)
+          .handleSize(0.1)
+          .extent([30,120])
+          .on("brush", brushed);
+
+      d3.select("svg")
+      .append("g")
+      .attr("class", "brush")
+      .attr("transform", "translate(576,250)")
+      .call(brush);
+
+      d3.select("svg").append("g")
+      .attr("class", "linear")
+      .attr("transform", "translate(40,350)");
+
+      brushed();
+
+      function brushed() {
+        filteredData = brush.filter(rawData.values, function (d) {return d.index});
+
+        var dates = filteredData.map(function (d) {return d.date});
+        var dateScale = d3.scale.ordinal()
+          .domain(dates)
+          .range(dates.map(function (d, i) {return i}));
+
+        filteredRainbars = brush.filter(rainBars, function (d) {return d.startInt});
+        filteredCloudbars = brush.filter(cloudBars, function (d) {return d.startInt});
+        filteredFreezebars = brush.filter(freezeBars, function (d) {return d.startInt});
+
+        var yScale = d3.scale.linear().domain([-10,110]).range([100,0]).clamp(true);
+        var xScale = d3.scale.linear().domain([0, filteredData.length]).range([0,250]);
+        var lineWidth = 250 / filteredData.length;
+
+        d3.select("g.linear")
+        .selectAll("*")
+        .remove();
+
+        d3.select("g.linear")
+        .append("g")
+        .attr("class", "weatherbars")
+        .selectAll("g")
+        .data([{class: "rain", data: filteredRainbars}, {class: "cloud", data: filteredCloudbars},  {class: "freeze", data: filteredFreezebars}])
+        .enter()
+        .append("g")
+        .each(function (g, gi) {
+          console.log(this,g)
+          d3.select(this)
+          .selectAll("rect")
+          .data(g.data)
+          .enter()
+          .append("rect")
+          .attr("class", function (d) {return g.class + " " + d.category})
+          .attr("y", gi * -10)
+          .attr("x", function (d) {return xScale(dateScale(toDate(d))) })
+          .attr("width", function (d) {return (d.endInt - d.startInt) * lineWidth })
+          .attr("height", "5px")
+        })
+
+        d3.select("g.linear")
+        .selectAll("g.linearBars")
+        .data(filteredData, function (d) {return d.date})
+        .enter()
+        .insert("g", "g.weatherbars")
+        .attr("class", "linearBars")
+        .each(function (d, i) {
+          if (i === 0 || i === filteredData.length - 1) {
+            d3.select(this).append("text")
+            .text(d.date)
+            .attr("y", -30)
+            .style("text-anchor", "middle");
+          }
+         d3.select(this).append("line").style("stroke-width", lineWidth).attr("class", "record")
+         d3.select(this).append("line").style("stroke-width", lineWidth).attr("class", "avg")
+         d3.select(this).append("line").style("stroke-width", lineWidth).attr("class", "yearLow")
+         d3.select(this).append("line").style("stroke-width", lineWidth).attr("class", "yearHigh")
+         d3.select(this).append("line").style("stroke-width", lineWidth).attr("class", "year")
+        });
+
+        d3.selectAll("g.linearBars")
+        .attr("transform", function (d,i) {return "translate(" + xScale(dateScale(d.date)) +",0)" });
+
+        d3.selectAll("g.linearBars")
+        .each(function (d) {
+          d3.select(this).select("line.record")
+            .attr("y1", yScale(parseInt(d.recHigh)))
+            .attr("y2", yScale(parseInt(d.recLow)));
+          d3.select(this).select("line.avg")
+            .attr("y1", yScale(parseInt(d.avgHigh)))
+            .attr("y2", yScale(parseInt(d.avgLow)));
+          if (d.max != null) {
+            if (d.min < parseInt(d.avgLow)) {
+            d3.select(this).select("line.yearLow")
+              .attr("y1", yScale(parseInt(d.min)))
+              .attr("y2", yScale(parseInt(d.avgLow)));
+            }
+            if (d.max > parseInt(d.avgHigh)) {
+              d3.select(this).select("line.yearHigh")
+                .attr("y1", yScale(parseInt(d.max)))
+                .attr("y2", yScale(parseInt(d.avgHigh)));
+            }
+            if (!(d.min > parseInt(d.avgHigh) || d.max < parseInt(d.avgLow))) {
+            d3.select(this).select("line.year")
+              .attr("y1", yScale(Math.max(d.min,parseInt(d.avgLow))))
+              .attr("y2", yScale(Math.min(d.max,parseInt(d.avgHigh))));
+            }
+          }
+        })
+
+      }
+
+    }
+
+    function toDate(d) {
+      var monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      var date = new Date(d.start);
+      return date.getDate() + "-" + monthNames[date.getMonth()];
+    }
+
+    function drawBars(data, type, offset) {
+
+      dateScale = d3.scale.linear()
+      .domain([1,366])
+      .range([0,(2 * Math.PI)]);
+
+      var arc = d3.svg.arc().innerRadius(offset).outerRadius(offset + 5);
+
+      d3.select("svg").append("g")
+      .attr("class", type + "bars")
+      .attr("transform", "translate(576,250)")
+      .selectAll("path")
+      .data(data)
+      .enter()
+      .append("path")
+      .attr("d", drawArc)
+      .attr("class", function (d) {return type + " " + d.category})
+
+      function drawArc(d) {
+        projected = {startAngle: dateScale(d.startInt), endAngle: dateScale(d.endInt) };
+        return arc(projected);
+      }
+    }
     </script>
 </body>
 </html>
